@@ -1,0 +1,746 @@
+---
+title: "STA490 Statistical Analysis Report"
+author: "Eric Raju"
+date: "3/5/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+options(knitr.duplicate.label = "allow")
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(message = FALSE, warning = FALSE)
+library(tidyverse)
+library(readxl)
+library(ggplot2)
+```
+
+**Introduction**
+
+This project involves the study of the ecology and survival of turtles in Algonquin park, Toronto, in a **mark-and-recapture experiment**. This essentially consists of arbitrarily selecting and tracking a sampling of some wild species and then sending them back into the wild, so to speak, and hopefully then being able to return at some time later to find them again. At each of these capture-recapture events, measurements are recorded, including the dimensions of the turtle and the ecological environment, so as to better assess an age estimate. Turtle ages in Algonquin Park, according to Dr. Niall, are correlated heavily with their size, and they seem to grow until adulthood at which point they eventually plateau.
+
+Prior to any statistical analysis of survival trends or patterns I had gone through the data and see if any cleaning needs to be done. This generally consists of checking out outlying or missing values and trying to figure out the patterns that arise therefrom.
+
+A central question of survival research involves population and age estimation. One of the aforementioned principles included the method of allometry, using relative turtle size data to estimate overall age. While similar environmental conditions as would occur in a dense forest like Algonquin Park, it would still be wise to consider unexpected results or outliers in the estimation process. Thus, I looked at first of all, the distribution of the probable year of birth for a turtle sighted on any given year.
+
+**Methods**
+
+*Data Collection*
+
+The data was collected over the course of the period 1978-2017 by several researchers at Algonquin Park, Ontario, a natural reserve home to many bogs and ponds with aquatic and amphibian species. This includes the painted turtle which is the focus of this study, centered around half a dozen fresh water sites. Each turtle was captured and tagged by a particular researcher in one season and then released back into the wild. Sex, size dimensions, mass, year of capture and name of researcher were all recorded, as well as whether it was found alive or dead. These were all imputed into an Excel file.
+
+*Preliminary Data Cleaning*
+
+We begin our analysis of the turtles data by sorting and classifying through the data according to the quality. Note that many data points had inconsistent notation such as notch labelling, where for example inconsistent labelling of 0’s in say the 1000s digits notation was standardized as mentioned in the EDA. Further streamlining of the data involved classification by \texttt{'site'} the turtles were found, first by focusing in on six categories of similar or nearby sites:
+
+*	**Site 1**: Arowhon
+
+*	**Site 2**: Sims Creek
+
+*	**Site 3**: Maiden Lake
+
+*	**Site 4**: Road to WHP, Blanding’s Bog
+
+*	**Site 5**: Wolf Howl Pond, Wolf Howl Pond E. (inc. Wolf Howl Pond e.)
+
+*	**Site 6**: Road to Wrose, West Rose, March Hare Lake
+
+
+The other sites are ignored as are those turtles captured in unknown sites.
+
+The variables \texttt{'notch'}, \texttt{'site'}, \texttt{'sex'}, \texttt{'midpl'}, \texttt{'dead'} and \texttt{'year'}  are all combined into a new data frame called \texttt{'turtlesforModel'}. The other variables given are defined as—
+
+*	\texttt{'notch'}: the identification for the particular turtle
+
+*	\texttt{'sex'}: the sex of the turtle
+
+*	\texttt{'midpl'}: the midline plastron length, the largest distance across the flat part of the turtle’s shell
+
+*	\texttt{'dead'}: a Boolean denoting whether the turtle was found dead or alive
+
+*	\texttt{'year'}: the year in which the observation took place
+
+This model is computed using the \texttt{marked} R package for which documentation can be found at(1).
+
+*The Model*
+
+The model is a so-called **Cormack-Jolly-Seber Model** which is used in capture-recapture experiments that take place over a period of several time intervals (such as years). A set number of animals are captured every ith time interval, marked and released back into the wild for some k intervals until the individual is captured dead or no longer seen. The hope is that while the true population of turtles, say, is unknowable or immeasurable, it may be estimable by considering the **capture probability**, \texttt{$$p$$}, of an individual specimen and then extrapolating this to measure an aggregate of the overall population. From this values such as the **survival probability**, \texttt{$$\phi$$}, can be estimated. From this(1) the probability an animal is not caught or observed again, \texttt{$$\chi$$}, can be calculated as
+
+$$\chi_{i}=(1-\phi_{i})+\phi_{i}(1-p_{i})\chi_{i+1}$$
+
+for the $$i$$th capture occasion.
+
+The model may be represented in the following schema:
+
+```{r, include=FALSE}
+!(images/cjs_schema.png)
+```
+
+Fig. 1: The CJS model schema, taken from
+
+Source: (2) https://ir.lib.uwo.ca/cgi/viewcontent.cgi?article=8763&context=etd.
+
+All dead turtles were removed from the data set.
+
+*Assumptions*(3):
+
+1. Every marked animal present in the population at sampling period $$i$$ has the same probability $$p_{i}$$ of being captured or resighted.
+
+2. Every marked animal present in the population at sampling period $$i$$ has the same probability $$\phi_{i}$$ of survival until sampling period $$i+1$$.
+
+3. Marks are neither lost nor overlooked and are recorded correctly.
+
+4. Sampling periods are instantaneous (in reality they are very short periods) and recaptured animals are released immediately.
+
+5. All emigration from the sampled area is permanent.
+
+6. The fate of each animal with respect to capture and survival probability is independent of the fate of any other animal.
+
+Here a 1 indicates that the individual was captured and 0 that it was not. From this a capture history for each animal can be constructed. For example, a string 01001 indicates that out of 5 observation periods, the turtle was only found on the '$$2^{nd}$$' and '$$5^{th}$$' ones.
+
+The likelihood can then be calculated as the product
+
+$$\mathscr{L} \left \phi_{i},p_{i} \vert x_{i} \right =
+\prod\limits_{i = 1}^{n} \pi \left \phi_{i},p_{i} \vert x_{i} \right$$
+
+where the individual capture probabilities $$π\left p_i,ϕ_i \vert x_i \right$$ depend on given covariates $$x_i$$. The model may be summarized, with the desired covariates from above, as follows:
+
+$$p_{it}=capture rate=α_{0}+α_{1}×site_{it}+α_{2}×mid.pl_{it}+notch_{i}+
+error_{\left 1 \right it};
+error_{\left 1 \right it}~N \left 0,σ_{i}^{2} \right$$
+$$ϕ_{it}=survival rate=β_{0}+β_{1}×site_{it}+β_{2}×mid.pl_{it}+β_{3}×sex_i+notch_{i}+error_{\left 2 \right it};$$
+$$error_{\left 2 \right it}~N \left 0,τ_{i}^{2} \right$$
+
+We had a couple further issues, however, involving estimation with unknown covariates. In many cases we do not know the midpl or sex. In the cases where both site and sex were unknown, these specimens were discarded from the data set. For turtles with only sex unknown, the fraction of turtles with unknown sex were calculated for each site as a fraction of the total. Those in sites with fewer than 5% unknowns were discarded (in this case, all the specimens with unknown sex at Blanding’s Bog). For the remainder, sex was randomly assigned according to a Bernoulli trial as male with probability Pra(male) and female with probability Pra(female) such that
+$$Pr \left male \right +Pr \left female \right =1.$$
+
+$$Pr \left male \right$$ (resp. $$Pr \left female \right$$) was calculated from, again, by site, the fraction of male (resp. female) specimens of all of the specimens found that did not have an unknown sex.
+
+The second issue involved unknown values of the midpl variable. Since midpl, unlike sex, was continuous, we could not randomly assign it according to a Beroulli trial. Instead we took a normal drift estimated mean imputation. That is, for the ith turtle, defining the subset of the data frame with all its occurences as \texttt{'this.turtle'}, with missing \texttt{'midpl'} values in year $$t$$, the imputed value was generated from a Normal distribution with mean
+
+$$ \wildetilde{\mu}_{i} = \frac{N}{N_{i}} \left \frac{\mu_{i} X_{i \left 0 \right}}{\bar{X_{\left 0 \right}}} \right
+
+$$
+
+and standard deviation
+
+$$ \wildetilde{\sigma}^2 = \frac{1}{N-1} \[ \sum_{i=1}^{N} \frac{N^2}{N_{i}^2} \left X_{i} - \widetilde{\mu}_{i} \right^2 \frac{X_{i \left 0 \right}^2}{\bar{X_{\left 0 \right}^2}\]
+
+\therefore \^{X}_{i,est,t} \sim N \left \^{\mu}_{i} , \wildetilde{\sigma} \right
+$$
+
+In the case where all of the turtles had identical size when first collected, this reduces to
+
+$$ \^{\mu}_{i} = \bar{X} $$ and hence $$ \^{\mu}_{i} = s_{i}^2 $$
+
+from the usual estimation procedure for Normality.
+
+Note that we excluded \texttt{'NA'} values since this is what we were trying to replace and it would otherwise make the values non-finite.
+
+```{r, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+#install.packages("tidyverse")
+#install.packages("here")
+#install.packages("marked")
+#install.packages("readxl")
+#install.packages("dplyr")
+library(tidyverse)
+library(here)
+library(marked)
+library(dplyr)
+library(readxl)
+
+# Special user-defined functions
+index <- function(lst,item,k,all=FALSE) {
+  # Return the first index of item in lst. If k = -1, return the last one. Return
+  # only the one index is all is false, else return all.
+  indices <- c()
+  n <- length(lst)
+  for (i in 1:n) {
+    if (item==lst[i]) {
+      indices <- append(indices,i,length(indices))
+    }
+  }
+  if ((k!=-1)&&(!all)) {
+    indices[k]
+  }
+  else if (k==-1) {
+    n <- length(indices)
+    indices[n]
+  }
+  else {
+    indices
+  }
+}
+
+unique <- function(lst) {
+  # Create a list of each unique element of lst.
+  unit <- c()
+  for (item in lst) {
+    if (!(item%in%unit)) {
+      unit <- append(unit,item,length(unit))
+    }
+  }
+  unit
+}
+#
+
+turtles_after_EDA <- read_excel("turtles_after_EDA.xlsx")
+
+turtles_raw = turtles_after_EDA
+##
+turtles_forModel = tibble(notch = turtles_raw$notch,
+                          site = turtles_raw$site,
+                          sex = turtles_raw$sex,
+                          midpl = turtles_raw$midpl,
+                          dead = turtles_raw$dead,
+                          year = turtles_raw$Year)
+
+## Selecting the data
+turtles_forModel = turtles_forModel[-which(turtles_forModel$dead==TRUE),]
+turtles_forModel = turtles_forModel[which(turtles_forModel$year%in%
+                                            c(1992:2017)),]
+turtles_forModel = turtles_forModel[-which(is.na(turtles_forModel$sex)),]
+turtles_forModel = turtles_forModel[-which(turtles_forModel$sex=='-'),]
+
+## Imputing unknown sex -> does site affect it
+unknowns = which(turtles_forModel$sex=='Unknown')
+sites_with_unknown = turtles_forModel$site[unknowns]
+sites_check = unique(sites_with_unknown)
+counts_all = c()
+counts_unknown = c()
+counts_male = c()
+counts_female = c()
+for (site in sites_check) {
+  at_site = which(turtles_forModel$site==site)
+  at_site_unknown = which(turtles_forModel[at_site,]$sex=='Unknown')
+  counts_all = append(counts_all,length(at_site),length(counts_all))
+  counts_unknown = append(counts_unknown,length(at_site_unknown),
+                          length(counts_unknown))
+  turtle_site = turtles_forModel[at_site,]
+  turtle_male = which(turtle_site$sex=='Male')
+  nmale = length(turtle_male)
+  counts_male = append(counts_male,nmale,length(counts_male))
+  turtle_female = which(turtle_site$sex=='Female')
+  nfemale = length(turtle_female)
+  counts_female = append(counts_female,nfemale,length(counts_female))
+}
+frac_unknown_bysite = counts_unknown/counts_all
+frac_unknown_bysite = round(frac_unknown_bysite,3)
+frac_male = counts_male/(counts_all-counts_unknown)
+frac_female = counts_female/(counts_all-counts_unknown)
+sites_check_unknown = cbind(sites_check,counts_all,counts_unknown,
+                            frac_unknown_bysite,counts_male,counts_female,
+                            frac_male,frac_female)
+
+remove = c("Blanding's Bog")
+nosite = which(turtles_forModel$site%in%remove)
+unknown_both = intersect(nosite,unknowns)
+turtles_forModel = turtles_forModel[-unknown_both,]
+
+## Imputing midpl as the average value for that turtle
+# using normal drift
+notches = turtles_forModel$notch
+notch.means.num = c()
+notch.inits= c()
+N = nrow(turtles_forModel)
+for (notch in notches) {
+  notch_inds = which(turtles_forModel$notch==notch)
+  this.turtle = turtles_forModel[notch_inds,]
+  known.turtle = this.turtle[which(!(is.na(this.turtle$midpl))),]
+  Ni = nrow(known.turtle)
+  mu.i = mean(known.turtle$midpl)
+  Xi.0 = known.turtle$midpl[1]
+  val = (1/Ni)*(mu.i*Xi.0)
+  notch.means.num = append(notch.means.num,val,length(notch.means.num))
+  notch.inits = append(notch.inits,Xi.0,length(notch.inits))
+}
+notch.means.denom = mean(notch.inits)
+notch.means = notch.means.num/notch.means.denom
+notch.means = cbind(notches,notch.means)
+colnames(notch.means) = c("notches","means")
+
+for (i in 1:nrow(turtles_forModel)) {
+  notch = turtles_forModel$notch[i]
+  notch_inds = which(turtles_forModel$notch==notch)
+  this.turtle = turtles_forModel[notch_inds,]
+  known.turtle = this.turtle[which(!(is.na(this.turtle$midpl))),]
+  midpl = known.turtle$midpl
+  Ni = nrow(known.turtle)
+  mu.i = mean(known.turtle$midpl)
+  Xi.0 = known.turtle$midpl[1]
+  midavg = as.numeric(notch.means[which(notch.means[,1]==notch),2])
+  sigma = ((1/Ni)^2)*((midpl-mu.i)^2)*((Xi.0/notch.means.denom)^2)
+  sigma = (1/(N-1))*sum(sigma)
+  for (ind in notch_inds) {
+    if (is.na(turtles_forModel$midpl[ind])) {
+      turtles_forModel[ind,4] = rnorm(n=1,mean=midavg,sd=sigma)
+    }
+  }
+}
+
+```
+
+```{r, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+
+turtles3 <- turtles_forModel %>%
+  select(notch, year) %>%
+  mutate(capture = "1") %>%
+  complete(notch, year, fill = list(capture = "0")) %>%
+  group_by(notch) %>%
+  summarise(capture_history = str_c(capture, collapse = ""))
+```
+
+```{r, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+  ## Combining sex and sites
+notches = turtles3$notch
+sex = c()
+sites = c()
+for (notch in notches) { # all the unique appearances of sex
+  this.turtle =
+      turtles_forModel[which(turtles_forModel$notch==notch),]
+  this.sex = this.turtle$sex[1]
+  this.site = this.turtle$site[1]
+  sex = append(sex,this.sex,length(sex))
+  sites = append(sites,this.site,length(sites))
+}
+turtles3$sex = sex
+```
+
+```{r, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+
+# define variable newsite and combine the following--
+newsite = vector(mode="list",length=6)
+newsite[[1]] = c("Arowhon Rd.")
+newsite[[2]] = c("Sims Creek")
+newsite[[3]] = c("Maiden Lake")
+newsite[[4]] = c("Road to WHP","Blanding's Bog")
+newsite[[5]] = c("Wolf Howl Pond","Wolf Howl Pond E.","Wolf Howl Pond e.")
+newsite[[6]] = c("Road to Wrose","West Rose","March Hare Lake")
+newsites = c()
+for (site in sites) {
+  newsite.add = NULL
+  for (i in 1:6) {
+    if (site%in%newsite[[i]]) {
+      newsite.add = i
+    }
+  }
+  newsites = append(newsites,newsite.add,length(newsites))
+}
+turtles3$newsite = newsites
+```
+
+```{r, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+
+# for mid-pl
+midplTable = notches
+for (year in 1992:2017) {
+  this.year = turtles_forModel[which(turtles_forModel$year
+                                     ==year),]
+  yearTurtle = c()
+  for (notch in 1:nrow(this.year)) {
+    yearTurtle = append(yearTurtle,this.year$midpl[notch],length(yearTurtle))
+  }
+  midplTable = cbind(midplTable,yearTurtle)
+}
+midplTable = midplTable[,-1]
+colnames(midplTable) = c(1992:2017)
+rownames(midplTable) = notches
+midplTibble = tibble(midplTable)
+nyears = 2017-1991
+yearTable = c(1992:2017)
+for (year in 1:nyears) {
+  name = paste("midpl",year)
+  name = gsub(" ","",name)
+  colnames(midplTable)[year] = name
+}
+turtles3 = cbind(turtles3,midplTable)
+```
+
+*Computing the Estimates: Testing Different Models*
+
+Here the constant term is denoted by 1 and the further variables are given as: \texttt{'sex'} and \texttt{'site'} = static, \texttt{'midpl}}} and \texttt{'time'} = time-varying, with Normal error having mean 0 and variance $$σ_{i}^{2}$$.
+
+The models are written as:
+
+(1)	Model with ~ 1
+
+(1, a) Model with ~ 1 + Sex
+
+(2)	Model with ~ 1 + Time
+
+(2, a) Model with ~ 1 + Sex + Midpl
+
+(3)	Model with ~ 1 + Time + Site
+
+(4)	Model with ~ 1 + Time + Site + Sex
+
+While we could not track directly $$\phi$$ and $$p$$ as functions of \texttt{'midpl'}, we were able to split the turtles into four size classes, based on their initial size when first captured:
+
+
+```{r, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+# Constructing Size Classes
+first_appearance = c()
+first_size = c()
+for (notch in notches) {
+  notch_inds = which(turtles_forModel$notch==notch)
+  this.turtle = turtles_forModel[notch_inds,]
+  appears = this.turtle$year[1]
+  size = this.turtle$midpl[1]
+  first_appearance = append(first_appearance,appears,length(first_appearance))
+  first_size = append(first_size,size,length(first_size))
+}
+
+size_classes = unname(quantile(first_size))
+notch_lists = vector("list",length=4)
+vals0 = which(first_size<=size_classes[1])
+vals1 = which(first_size<=size_classes[2])
+vals1 = setdiff(vals1,vals0)
+vals2 = which(first_size<size_classes[3])
+vals2 = setdiff(setdiff(vals2,vals1),vals0)
+vals3 = which(first_size<size_classes[4])
+vals3 = setdiff(setdiff(setdiff(vals3,vals2),vals1),vals0)
+vals4 = which(first_size<size_classes[5])
+vals4 = setdiff(setdiff(setdiff(setdiff(vals4,vals3),vals2),vals1),vals0)
+vals1 = c(1,vals0,vals1)
+notch_lists[[1]] = as.data.frame(rbind(notches[vals1],
+                                       first_appearance[vals1],
+                                                        first_size[vals1]))
+notch_lists[[2]] = as.data.frame(rbind(notches[vals2],
+                                       first_appearance[vals2],
+                                                        first_size[vals2]))
+notch_lists[[3]] = as.data.frame(rbind(notches[vals3],
+                                       first_appearance[vals3],
+                                                        first_size[vals3]))
+notch_lists[[4]] = as.data.frame(rbind(notches[vals4],
+                                       first_appearance[vals4],
+                                                        first_size[vals4]))
+
+#df <- data.frame(as.character(size_classes))
+#kable(df, col.names = c("","0%","25%","50%","75%","100%"), escape = F, caption = "Quantiles #for size classes of turtles") %>%
+#  kable_styling(latex_options = "hold_position")
+
+turtles3 = turtles3[notches,]
+turtles3.temp = turtles3[,6:ncol(turtles3)]
+for (row in 1:nrow(turtles3.temp)) {
+  for (col in 1:ncol(turtles3.temp)) {
+    temp = as.numeric(as.character(turtles3.temp[row,col]))
+    turtles3.temp[row,col] = temp
+  }
+}
+turtles3[,6:ncol(turtles3)] = turtles3.temp
+
+turtles4 = turtles3[,1:5]
+turtles4$ch = turtles3$capture_history
+
+model1 = vector("list",length=2)
+model2 = vector("list",length=2)
+model3 = vector("list",length=2)
+model4 = vector("list",length=2)
+model1[[1]] = turtles4[vals1,]
+model1[[2]] = c("phi^","p^","AIC","-2lnl")
+model2[[1]] = turtles4[vals2,]
+model2[[2]] = c("phi^","p^","AIC","-2lnl")
+model3[[1]] = turtles4[vals3,]
+model3[[2]] = c("phi^","p^","AIC","-2lnl")
+model4[[1]] = turtles4[vals4,]
+model4[[2]] = c("phi^","p^","AIC","-2lnl")
+model_turtles = list("model class 1"=model1,
+                     "model class 2"=model2,
+                     "model class 3"=model3,
+                     "model class 4"=model4
+)
+```
+
+A quantile plot:
+
+```{r, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+plot(quantile(first_size))
+```
+Fig. 1: The quantiles of the size classes.
+
+The above models are tested according to the code instructions(4):
+
+# odds.2a = cbind(ests.2a[,1:2],round(exp(ests.2a[,5:8]),4))
+
+```{r, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+
+# Time-varying models
+turtles4$ch = turtles4$capture_history
+turtles.proc = process.data(turtles4)
+design.Phi = list(static=c("notch","sex","newsite"),
+                  time.varying=c("midpl"))
+design.p = list(static=c("notch","sex","newsite"),
+                time.varying=c("midpl"))
+design.parameters = list(Phi=design.Phi,p=design.p)
+turtles.ddl = make.design.data(turtles.proc,parameters=design.parameters)
+
+#fit.models=function() # Simple models: 1, 1+time, 1+time+site, 1+time+site+sex
+#fit.models2=function() # Simple models: 1+sex
+#fit.modelsNew=function() # Time-varying model: 1+sex+midpl
+fit.modelsNew2=function()
+{
+  #Phi.dot = list(formula=~1)
+  #p.dot = list(formula=~1)
+  #Phi.time=list(formula=~1+time)
+  #p.time=list(formula=~1+time)
+  #Phi.time.newsite = list(formula=~1+time+newsite)
+  #p.time.newsite = list(formula=~1+time+newsite)
+  #Phi.time.newsite.sex = list(formula=~1+time+newsite+sex)
+  #p.time.newsite.sex = list(formula=~1+time+newsite+sex)
+  #Phi.sex = list(formula=~1+sex)
+  #p.sex = list(formula=~1+sex)
+  Phi.sex.midpl = list(formula=~1+sex+as.numeric(as.character(midpl)))
+  p.sex.midpl = list(formula=~1+sex+as.numeric(as.character(midpl)))
+  cml=create.model.list(c("Phi","p"))
+  results=crm.wrapper(cml,data=turtles.proc, ddl=turtles.ddl, hessian=TRUE,
+                      external=FALSE,accumulate=FALSE)
+  return(results)
+}
+#turtles.models=fit.models()
+#turtles.models2=fit.models2()
+#turtles.modelsNew=fit.modelsNew()
+turtles.modelsNew2=fit.modelsNew2()
+
+
+### ignore this
+# For the models of the form ~1+time+newsite+(sex), by midpl quantile
+for (i in 1:4) {
+  turtles.proc = process.data(model_turtles[[i]][[1]])
+  design.Phi = list(static=c("notch","sex","newsite"))
+  design.p = list(static=c("notch","sex","newsite"))
+  design.parameters = list(Phi=design.Phi,p=design.p)
+  turtles.ddl = make.design.data(turtles.proc,parameters=design.parameters)
+  
+  if (i<4) {
+    print(i)
+    fit.models3=function()
+    {
+      Phi.time.newsite.sex = list(formula=~1+time+newsite+sex)
+      p.time.newsite.sex = list(formula=~1+time+newsite+sex)
+      cml=create.model.list(c("Phi","p"))
+      results=crm.wrapper(cml,data=turtles.proc, ddl=turtles.ddl,
+                          external=FALSE,accumulate=FALSE)
+      return(results)
+    }
+    turtles.models3=fit.models3()
+    model5 = turtles.models2$Phi.time.newsite.sex.p.time.newsite.sex
+    results5 = model5$results
+    model_turtles[[i]][[2]] = results5
+  } else if (i==4) { # nearly all of the turtles here are female, by coincidence
+    # which interferes with the model
+    fit.models3=function()
+    {
+      Phi.time.newsite = list(formula=~1+time+newsite)
+      p.time.newsite = list(formula=~1+time+newsite)
+      cml=create.model.list(c("Phi","p"))
+      results=crm.wrapper(cml,data=turtles.proc, ddl=turtles.ddl,hessian=TRUE,
+                          external=FALSE,accumulate=FALSE)
+      return(results)
+    }
+    turtles.models3=fit.models3()
+    model5 = turtles.models2$Phi.time.newsite.p.time.newsite
+    results5 = model5$results
+    model_turtles[[i]][[2]] = results5
+  }
+}
+```
+
+**Discussion**
+
+We may evaluate the coefficients as follows--
+
+```{r, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+# Model 1:
+model1 = turtles.models$Phi.dot.p.dot
+results = model1$results$beta
+# Model 2:
+model2 = turtles.models$Phi.time.p.time
+results2 = model2$results$beta
+# Model 3:
+model3 = turtles.models$Phi.time.newsite.p.time.newsite
+results3 = model3$results$beta
+# Model 4:
+model4 = turtles.models$Phi.time.newsite.sex.p.time.newsite
+results4 = model4$results$beta
+timevals.Phi = c(1992:2017)
+timevals.p = c(1992:2017)
+phi2 = c()
+p2 = c()
+phi3 = c()
+p3 = c()
+phi4 = c()
+p4 = c()
+phi5 = c()
+p5 = c()
+for (year in 1:25) {
+  Phi2.year = sum(as.numeric(results2$Phi[1:year])) 
+  p2.year = sum(as.numeric(results2$p[1:year]))
+  timevals.Phi = rbind(timevals.Phi,Phi2.year)
+  timevals.p = rbind(timevals.p,p2.year)
+  Phi3.year = sum(as.numeric(results3$Phi[1:year])) 
+  p3.year = sum(as.numeric(results3$p[1:year]))
+  timevals.Phi = rbind(timevals.Phi,Phi3.year)
+  timevals.p = rbind(timevals.p,p3.year)
+  Phi4.year = sum(as.numeric(results4$Phi[1:year])) 
+  p4.year = sum(as.numeric(results4$p[1:year]))
+  timevals.Phi = rbind(timevals.Phi,Phi4.year)
+  timevals.p = rbind(timevals.p,p4.year)
+  Phi5.year = sum(as.numeric(results5$Phi[1:year])) 
+  p5.year = sum(as.numeric(results5$p[1:year]))
+  timevals.Phi = rbind(timevals.Phi,Phi5.year)
+  timevals.p = rbind(timevals.Phi,p5.year)
+}
+
+colnames(timevals.Phi) = timevals.Phi[1,]
+timevals.Phi = timevals.Phi[-1,]
+colnames(timevals.p) = timevals.p[1,]
+timevals.p = timevals.p[-1,]
+
+likel = c(model1$results$neg2lnl,model2$results$neg2lnl,model3$results$neg2lnl,
+          model4$results$neg2lnl,model5$results$neg2lnl)
+AIC = c(model1$results$AIC,model2$results$AIC,model3$results$AIC,
+        model4$results$AIC,model5$results$AIC)
+
+timevals.Phi = c("beta_0",as.character(c(2:25)),"newsite",as.character(c(2:25)),
+                 "sexmale")
+timevals.p = c("beta_0",as.character(c(2:25)),"newsite",as.character(c(2:25)))
+for (j in 1:4) { # the first for the year is the coefficient, the second is the term
+  model = model_turtles[[j]][[2]]
+  coefs.beta.phi = unname(model$beta$Phi)
+  vals.phi = c()
+  coefs.beta.p = unname(model_turtles[[j]][[2]]$beta$p)
+  vals.p = c()
+  for (y in 2:25) {
+    beta.phi.y = coefs.beta.phi[1] + sum(coefs.beta.phi[2:y])
+    vals.phi = append(vals.phi,beta.phi.y,length(vals.phi))
+    beta.p.y = coefs.beta.p[1] + sum(coefs.beta.p[2:y])
+    vals.p = append(vals.p,beta.p.y,length(vals.p))
+  }
+  coef.sexM.phi = unname(model_turtles[[j]][[2]]$beta$Phi[27])
+  coefs.phi = c(coefs.beta.phi,vals.phi)
+  timevals.Phi = rbind(timevals.Phi,coefs.phi)
+  coefs.p = c(coefs.beta.phi,vals.p)
+  timevals.p = rbind(timevals.p,coefs.p)
+}
+
+timevals.p = timevals.p[,-51]
+
+for (col in 27:50) {
+  timevals.Phi[1,col] = paste("Phi^ value for year",col-25)
+  timevals.p[1,col] = paste("p^ value for year",col)
+}
+colnames(timevals.Phi) = timevals.Phi[1,]
+colnames(timevals.p) = timevals.p[1,]
+timevals.Phi = timevals.Phi[-1,]
+timevals.p = timevals.p[-1,]
+
+timevals.Phi = as.matrix(timevals.Phi)
+timevals.p = as.matrix(timevals.p)
+
+class(timevals.Phi) = 'numeric'
+class(timevals.p) = 'numeric'
+
+```
+
+It may be helpful to plot the coefficients to see what the effects are.
+
+```{r, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+# Plots by year by size class
+years = c(1:25)+1991
+matplot(x=years,y=t(timevals.Phi[,c(1,27:50)]),type='l',
+        main="Phi^ versus time versus size class",col=c("red","blue","green"))
+matplot(x=years,y=t(timevals.p[,c(1,27:50)]),type='l',
+        main="p^ versus time versus size class",col=c("red","blue","green"))
+
+# Plots of site effects by size class & sex male by size class for Phi
+matplot(x=size_classes[2:4],y=cbind(timevals.Phi[,26],
+                                    timevals.p[,26]),type='l',
+        col=c("red","blue"))
+
+# Plot of frequency of catches by year
+plot(density(turtles_raw$Year))
+```
+Fig. 2: A plot of the frequency of catches by year.
+
+Here we have plotted the first three size-class models.
+
+Fig. 3(a,b,c): The coefficients.
+	The effect of size for the 25% (red), 50% (blue) and 75% (green) quantiles for ϕ.
+	The effect of size for the 25% (red), 50% (blue) and 75% (green) quantiles for p.
+	A quantile plot of site effects for ϕ (red) and p (blue).
+
+
+**Assessing goodness-of-fit**
+'''
+(Table)
+'''
+The results of the models can be compared here:
+
+Table 1: The results for the first four models. 
+
+Given that lower AIC values give a better fit model, it is clear that the model is time-varying and the estimates are much closer to ϕ ̂≈2,p ̂≈1.5.
+
+For $$\^{Phi}$$ effects, we see that in most cases, as size increases (red-blue-green), the annual effect is to increase survival rate. For $$p$$ effects, in contrast, in most cases the annual effect decreases capture rate. While there seem to be clear trends, influenced by likelihood of capture (for example, larger turtles are less likely to be eaten by predators), the ambiguity especially in the middle period from roughly 2000-2010 is due to the rapid increase in the number of turtles captured. We can see this better reflected in the density plot of turtles by year of capture:
+
+```{r, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+plot(density(turtles_raw$Year))
+```
+Fig. 4: The density of turtles captured by year.
+
+Further, if we look at the density plot by site (where each "number" represents the order in the classification scheme given above), we see that, as mentioned in the exploratory data analysis, the *vast* majority of turtles among the ones being analysed were collected at Wolf Howl Pond, and this started to become an even bigger factor around the years 2000-2010:
+
+```{r, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+plot(density(turtles4$newsite))
+```
+Fig. 5: The density of turtles captured by site.
+
+Key:
+*	**Site 1**: Arowhon
+
+*	**Site 2**: Sims Creek
+
+*	**Site 3**: Maiden Lake
+
+*	**Site 4**: Road to WHP, Blanding’s Bog
+
+*	**Site 5**: Wolf Howl Pond, Wolf Howl Pond E. (inc. Wolf Howl Pond e.)
+
+*	**Site 6**: Road to Wrose, West Rose, March Hare Lake
+
+
+Thus we see that the individual researcher, weather events, and even geographic features may influence the survivability of turtles. We can make a general estimate, based on the initial values, that $$\^{phi}\sim3$$ and $$\^p\sim1.5$$ based on the convergence of the table above,
+
+**Limitations**
+
+As we can see there were some obvious limitations in the processing and modelling framework. First, the data collection was not ideal, but made by humans under differing circumstances, each individual collector having their own capacity to collect (rather than say, a robot that is always running). For example, as we saw in the EDA and confirmed through the data analysis, some individuals collected much more data than others (and often more consistently), in some sites much more than others. For example, the vast majority of the turtles were found in Wolf Howl Pond, which may skew the collection of the data. Another way that the method of data collection itself limits the analysis is that the rate of change of capture, especially beginning in the year 2000, was not constant, but a radically increasing exponential function of time. Thus, this interfered to some degree and over-estimated the variability in the survival rate $$\phi$$ and especially capture rate $$p$$ which is reflected in the arrangement of the data for size class 1, the smallest size class. It seems that this bias in the smaller size class that is absent from the other classes is either coincidental or due to some other mechanism hidden in the data, as we see a similar bias in size class 4 (not shown), the highest size class, whereby all but 2 of the turtles collected happened to be female, potentially hindering the estimability of the data. Thus, any future similar investigations must try to ensure consistency, even if not in covariates, at least in rate of change of capture rate, for example.
+
+Also, it seems that some data was collected inconsistently, for example, not all turtles had their sex noted, so these remaining turtles had to have their sex estimated according to Bernoulli trials from data representing the turtles with known sex.
+
+Another major limitation was a key assumption behind the model itself--that the turtles were either observed or not observed. This has a dual limitation. First, if the turtles were not observed after some time, say $$T$$ years, but before 2020, it is unclear whether the turtle died or is "hiding" somewhere, which skews the population estimate. The second aspect here is that unobserved turtles, by definition, have unobserved covariates, especially if there is a long time between capture events $$i$$ and $$j$$, where $$j$$ is the next capture event after $$i$$ such that both are 1 (there may be 0's in between). Thus, the missing covariates need to be estimated somehow, making the model somewhat circular. A way we attempted to minimize this bias was by mean imputation (though individual variability was controlled by a normal drift with constant variance), though again, this is not ideal.
+
+**Conclusions**
+
+In conclusion, we are able to get some clear trends, even if derived from sparse and somewhat inconsistent data, by using the estimation method of the so-called CJS Capture-Marked-Recapture Models, which are subject to environmental influences that may render the data somewhat circular. However, the CJS model is nonetheless a good starting point for estimating the survival rate and capture rate of open populations with unknown true value.
+
+It seems that the best fit model is a time varying one and if we make it depend on time (e.g. by adding temporal covariates such as \textttt{midpl}) it would give a better assessment of the estimates and model terms. Further extensions should include a random effects model which incorporates effects of site as something random rather than as a fixed covariate as it is now.
+
+References
+
+1.	Laake, Jeff & Johnson, Devin. 2016. “Mark-recapture analysis for survival and abundance estimation. Package ‘marked’.” PDF. Accessed Feb. 15, 2021. Available at: 
+https://cran.microsoft.com/snapshot/2017-02 04/web/packages/marked/marked.pdf
+2.	Mu, Jiaqi, "Exploring the Estimability of Mark-Recapture Models with Individual, Time-Varying Covariates using the Scaled Logit Link Function" (2019). Electronic Thesis and Dissertation Repository. 6385. https://ir.lib.uwo.ca/etd/6385.
+3.	Rotella, Jay. Lecture notes from WILD 502: Analysis of Population & Habitat Data. “Collack-Jolly-Seber Models.” 2019. Accessed Dec. 20, 2021. Available at:
+https://www.montana.edu/rotella/documents/502/CJS.pdf.
+4.	Laake, Jeff L., Johnson, Devin S., Conn, Paul B. “marked package vignette.” 2019. Accessed January 10, 2021. Available at:
+https://cran.r-project.org/web/packages/marked/vignettes/markedVignette.html.
